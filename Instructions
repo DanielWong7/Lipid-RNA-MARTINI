@@ -1,0 +1,32 @@
+Update IndexChargedBeads.py, topol.top, martini_eq.mdp, and all the martini_mdExtendedXXXns.mdp to correctly match the lipid being simulated
+
+############## CREATING THE SIMULATION #############
+$ gmx insert-molecules -ci lipid.gro -nmol 25 -radius 0.21 -try 500 -box 10 10 10 -o System_lipid
+$ gmx insert-molecules -f System_lipid.gro -ci cg-RNA.gro -nmol 1 -radius 0.21 -try 500 -o System_lipid_RNA
+$ gmx grompp -f minimization_smallSteps.mdp -c System_lipid_RNA.gro -r System_lipid_RNA.gro -p topol.top -o System_initMin
+$ gmx mdrun -deffnm System_initMin -v
+$ gmx solvate -cp System_initMin.gro -cs water.gro -radius 0.21 -p topol.top -o System_solvated
+$ gmx grompp -f minimization_smallSteps.mdp -c System_solvated.gro -r System_solvated.gro -p topol.top -o System_ions
+$ gmx genion -s System_ions.tpr -nn 75 -np 26 -o System_ions (select the first W option)(change the -nn and -np option to neutralize your lipid system)
+Edit topol.top manually to reflect how water was replaced with ions
+$ gmx grompp -f minimization_smallSteps.mdp -c System_ions.gro -r System_ions.gro -p topol.top -o System_finMin
+$ gmx mdrun -deffnm System_finMin -v -rdd 2.0
+$ gmx grompp -f martini_eq.mdp -c System_finMin.gro -p topol.top -o System_eq
+$ gmx mdrun -deffnm System_eq -v -rdd 2.0
+$ gmx grompp -f martini_mdExtended100ns.mdp -c System_eq.gro -t System_eq.cpt -p topol.top -o System_md (select the mdp file with the desired run length)
+$ gmx mdrun -deffnm System_md -v -rdd 2.0
+
+############## ANALYZING THE SIMULATION ##############
+Run the IndexChargedBeads.py Python script to generate the chargedBeadsIndex.ndx index file
+$ gmx mindist -f System_md.xtc -s System_md.gro -od minDist_md -on numConts_md -o atomPairs_md -n chargedBeadsIndex.ndx (select 0 then 1)
+$ xmgrace numConts_md.xvg
+$ xmgrace minDist_md.xvg
+
+############## VISUALIZING THE SIMULATION ##############
+$ gmx trjconv -f System_md.xtc -s System_md.tpr -pbc whole -o System_md-pbcTreated (select system output)
+$ gmx trjconv -f System_md-pbcTreated.xtc -o System_md_cluster.gro -e 0.001 -pbc cluster -s System_md.tpr (select lipid to cluster and system to output)
+$ gmx grompp -f martini_mdExtended100ns.mdp -c System_eq.gro -t System_eq.cpt -p topol.top -o System_md_cluster
+$ gmx trjconv -f System_md-pbcTreated.xtc -s System_md_cluster.tpr -pbc nojump -o System_md_cluster.xtc (select system output)
+$ vmd System_md.gro System_md-pbcTreated.xtc (for system without pbc removal)
+$ vmd System_md_cluster.gro System_md_cluster.xtc (for system with pbc removal)
+Note that the clustering algorithm may not always generate correct trajectories and can sometimes "split" the RNA 
